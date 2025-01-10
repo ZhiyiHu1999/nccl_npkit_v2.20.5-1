@@ -6,6 +6,10 @@
 
 #include "op128.h"
 
+#if defined(ENABLE_NPKIT)
+#include "npkit/npkit.h"
+#endif
+
 #define NCCL_LL128_FLAGTHREAD (NCCL_LL128_LINEELEMS-1)
 
 template<typename T, typename RedOp, typename Fan, int Direct, int P2p>
@@ -48,6 +52,16 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL128, P2p>:
   inline __device__ uint64_t* sendPtr(int i) { return sendBuff[i]+sendOffset(i); }
   inline __device__ uint64_t recvFlag(int i) { return recvStep[i]+1; }
   inline __device__ uint64_t sendFlag(int i) { return sendStep[i]+1; }
+
+#if defined(ENABLE_NPKIT)
+public:
+  int npKitCtxIdx = 0;
+  uint64_t npKitDataProcessEntryTime = 0;
+  uint64_t npKitDataProcessExitTime = 0;
+  uint64_t npKitDataProcessTotalTime = 0;
+  uint64_t npKitDataProcessSize = 0;
+private:
+#endif  
 
   inline __device__ void barrier() {
     asm volatile ("bar.sync %1, %0;" :: "r"(nthreads), "r"(15-group));

@@ -10,6 +10,9 @@
 #include "nccl.h"
 #include "nccl_common.h"
 #include "align.h"
+#if defined(ENABLE_NPKIT)
+#include "npkit/npkit_struct.h"
+#endif
 #include <stdint.h>
 
 extern const char* ncclFuncStr[NCCL_NUM_FUNCTIONS];
@@ -322,6 +325,12 @@ struct ncclDevComm {
 
   // Channels, device side
   struct ncclDevChannel* channels/*[MAXCHANNELS]*/;
+
+#if defined(ENABLE_NPKIT)
+  NpKitEventCollectContext* npKitEventCollectContexts;
+  uint64_t* cpuTimestamp;
+#endif
+
 };
 
 struct alignas(16) ncclDevCommAndChannels {

@@ -16,6 +16,9 @@
 #include "enqueue.h"
 #include "graph.h"
 #include "argcheck.h"
+#if defined(ENABLE_NPKIT)
+#include "npkit/npkit.h"
+#endif
 #include "tuner.h"
 #include <fcntl.h>
 #include <string.h>
@@ -457,6 +460,23 @@ static ncclResult_t devCommSetup(ncclComm_t comm) {
       NCCLCHECKGOTO(ncclCudaMemcpyAsync(tmpCommAndChans.channels[c].ring.userRanks, comm->channels[c].ring.userRanks, nRanks, comm->sharedRes->deviceStream.cudaStream), ret, fail);
     }
   }
+
+#if defined(ENABLE_NPKIT)
+  // Init NPKit
+  NCCLCHECK(NpKit::Init(comm->rank));
+
+  #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_NPKIT_INIT_ENTRY) && defined(ENABLE_NPKIT_EVENT_NPKIT_INIT_EXIT)
+    NpKit::CollectCpuEvent(NPKIT_EVENT_NPKIT_INIT_ENTRY, 0, 0, std::chrono::steady_clock::now().time_since_epoch().count(), 0, 0, 0, 0);
+  #endif  
+
+  tmpCommAndChans.comm.npKitEventCollectContexts = NpKit::GetGpuEventCollectContexts();
+  tmpCommAndChans.comm.cpuTimestamp = NpKit::GetCpuTimestamp();
+  
+  #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_NPKIT_INIT_ENTRY) && defined(ENABLE_NPKIT_EVENT_NPKIT_INIT_EXIT)
+    NpKit::CollectCpuEvent(NPKIT_EVENT_NPKIT_INIT_EXIT, 0, 0, std::chrono::steady_clock::now().time_since_epoch().count(), 0, 0, 0, 0);
+  #endif
+
+#endif  
 
   NCCLCHECKGOTO(ncclCudaMemcpyAsync(devCommAndChans, &tmpCommAndChans, 1, comm->sharedRes->deviceStream.cudaStream), ret, fail);
 exit:
@@ -2099,6 +2119,20 @@ ncclResult_t ncclCommDestroy(ncclComm_t comm) {
 
   NCCLCHECK(commReclaim(comm));
   INFO(NCCL_INIT,"comm %p rank %d nranks %d cudaDev %d busId %lx - Destroy COMPLETE", comm, rank, nranks, cudaDev, busId);
+
+#if defined(ENABLE_NPKIT)
+  const char* npkitDumpDir = nullptr;
+
+  // Dump NPKit events and shutdown
+  npkitDumpDir = getenv("NPKIT_DUMP_DIR");
+  if (npkitDumpDir == nullptr) {
+    WARN("NPKIT_DUMP_DIR is empty");
+  } else {
+    INFO(NCCL_INIT, "NPKit Dump Started");
+    NCCLCHECK(NpKit::Dump(npkitDumpDir));
+  }
+  NCCLCHECK(NpKit::Shutdown());
+#endif   
 
   return ncclSuccess;
 }
