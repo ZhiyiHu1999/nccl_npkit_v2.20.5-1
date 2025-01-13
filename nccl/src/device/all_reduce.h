@@ -65,45 +65,45 @@ namespace {
       nelem = (int)min(chunkCount, remCount - chunkOffset);
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_SEND_ENTRY)
-      if (tid == 0) {
+      if (tid == 0 && nelem >= 0) {
         NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_ENTRY, nelem*sizeof(T), 0, clock64(),
             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
-        prims.npKitDataProcessTotalTime = 0;
       }
 #endif
 
       prims.send(offset, nelem);
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_SEND_EXIT)
-      if (tid == 0) {
+      if (tid == 0 && nelem >= 0) {
         NpKit::CollectGpuEvent(NPKIT_EVENT_SEND_EXIT, nelem*sizeof(T), prims.npKitDataProcessTotalTime, clock64(),
             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
       }
 #endif
 
       // k-2 steps: reduce and copy to next GPU
-#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_RECV_REDUCE_SEND_ENTRY)
-      if (tid == 0 && nranks > 2) {
-        NpKit::CollectGpuEvent(NPKIT_EVENT_RECV_REDUCE_SEND_ENTRY, nelem*(nranks-2)*sizeof(T), 0, clock64(),
-            ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
-        prims.npKitDataProcessTotalTime = 0;
-      }
-#endif
-
       for (int j = 2; j < nranks; ++j) {
         chunk = modRanks(ringIx + nranks - j);
         chunkOffset = chunk * chunkCount;
         offset = gridOffset + elemOffset + chunkOffset;
         nelem = (int)min(chunkCount, remCount - chunkOffset);
-        prims.recvReduceSend(offset, nelem);
-      }
 
-#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_RECV_REDUCE_SEND_EXIT)
-      if (tid == 0 && nranks > 2) {
-        NpKit::CollectGpuEvent(NPKIT_EVENT_RECV_REDUCE_SEND_EXIT, nelem*(nranks-2)*sizeof(T), prims.npKitDataProcessTotalTime, clock64(),
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_RECV_REDUCE_SEND_ENTRY)
+      if (tid == 0 && nelem >= 0) {
+        NpKit::CollectGpuEvent(NPKIT_EVENT_RECV_REDUCE_SEND_ENTRY, nelem*sizeof(T), 0, clock64(),
             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
       }
-#endif      
+#endif
+
+        prims.recvReduceSend(offset, nelem);
+
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_RECV_REDUCE_SEND_EXIT)
+      if (tid == 0 && nelem >= 0) {
+        NpKit::CollectGpuEvent(NPKIT_EVENT_RECV_REDUCE_SEND_EXIT, nelem*sizeof(T), prims.npKitDataProcessTotalTime, clock64(),
+            ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
+      }
+#endif 
+
+      }
 
       // step k-1: reduce this buffer and data, which will produce the final
       // result that we store in this data and push to the next GPU
@@ -112,48 +112,46 @@ namespace {
       offset = gridOffset + elemOffset + chunkOffset;
       nelem = (int)min(chunkCount, remCount - chunkOffset);
 
-
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_DIRECT_RECV_REDUCE_COPY_SEND_ENTRY)
-      if (tid == 0) {
+      if (tid == 0 && nelem >= 0) {
         NpKit::CollectGpuEvent(NPKIT_EVENT_DIRECT_RECV_REDUCE_COPY_SEND_ENTRY, nelem*sizeof(T), 0, clock64(),
             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
-        prims.npKitDataProcessTotalTime = 0;
       }
 #endif
 
       prims.directRecvReduceCopySend(offset, offset, nelem, /*postOp=*/true);
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_DIRECT_RECV_REDUCE_COPY_SEND_EXIT)
-      if (tid == 0) {
+      if (tid == 0 && nelem >= 0) {
         NpKit::CollectGpuEvent(NPKIT_EVENT_DIRECT_RECV_REDUCE_COPY_SEND_EXIT, nelem*sizeof(T), prims.npKitDataProcessTotalTime, clock64(),
             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
       }
 #endif
 
       // k-2 steps: copy to next GPU
-
-#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_DIRECT_RECV_COPY_SEND_ENTRY)
-      if (tid == 0 && nranks > 2) {
-        NpKit::CollectGpuEvent(NPKIT_EVENT_DIRECT_RECV_COPY_SEND_ENTRY, nelem*(nranks-2)*sizeof(T), 0, clock64(),
-            ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
-        prims.npKitDataProcessTotalTime = 0;
-      }
-#endif
-
       for (int j = 1; j < nranks - 1; ++j) {
         chunk = modRanks(ringIx + nranks - j);
         chunkOffset = chunk * chunkCount;
         offset = gridOffset + elemOffset + chunkOffset;
         nelem = (int)min(chunkCount, remCount - chunkOffset);
-        prims.directRecvCopySend(offset, nelem);
-      }
 
-#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_DIRECT_RECV_COPY_SEND_EXIT)
-      if (tid == 0 && nranks > 2) {
-        NpKit::CollectGpuEvent(NPKIT_EVENT_DIRECT_RECV_COPY_SEND_EXIT, nelem*(nranks-2)*sizeof(T), prims.npKitDataProcessTotalTime, clock64(),
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_DIRECT_RECV_COPY_SEND_ENTRY)
+      if (tid == 0 && nelem >= 0) {
+        NpKit::CollectGpuEvent(NPKIT_EVENT_DIRECT_RECV_COPY_SEND_ENTRY, nelem*sizeof(T), 0, clock64(),
             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
       }
 #endif
+
+        prims.directRecvCopySend(offset, nelem);
+
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_DIRECT_RECV_COPY_SEND_EXIT)
+      if (tid == 0 && nelem >= 0) {
+        NpKit::CollectGpuEvent(NPKIT_EVENT_DIRECT_RECV_COPY_SEND_EXIT, nelem*sizeof(T), prims.npKitDataProcessTotalTime, clock64(),
+            ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
+      }
+#endif
+
+      }
 
       // Make final copy from buffer to dest.
       chunk = modRanks(ringIx + 1);
@@ -162,17 +160,16 @@ namespace {
       nelem = (int)min(chunkCount, remCount - chunkOffset);
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_DIRECT_RECV_ENTRY)
-      if (tid == 0) {
+      if (tid == 0 && nelem >= 0) {
         NpKit::CollectGpuEvent(NPKIT_EVENT_DIRECT_RECV_ENTRY, nelem*sizeof(T), 0, clock64(),
             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
-        prims.npKitDataProcessTotalTime = 0;
       }
 #endif
 
       prims.directRecv(offset, nelem);
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_DIRECT_RECV_EXIT)
-      if (tid == 0) {
+      if (tid == 0 && nelem >= 0) {
         NpKit::CollectGpuEvent(NPKIT_EVENT_DIRECT_RECV_EXIT, nelem*sizeof(T), prims.npKitDataProcessTotalTime, clock64(),
             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
       }
