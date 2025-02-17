@@ -47,7 +47,7 @@ class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p>:
   inline __device__ uint32_t recvFlag(int i) { return NCCL_LL_FLAG(recvStep[i]+1); }
   inline __device__ uint32_t sendFlag(int i) { return NCCL_LL_FLAG(sendStep[i]+1); }
 
-#if defined(ENABLE_NPKIT)
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_ENTRY) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_EXIT)
 public:
   int npKitCtxIdx = 0;
   uint64_t npKitDataProcessEntryTime = 0;
@@ -55,6 +55,9 @@ public:
   uint64_t npKitDataProcessTotalTime = 0;
   uint64_t npKitDataProcessSize = 0;
 private:
+  uint64_t npKitWaitEntryTime = 0;
+  uint64_t npKitWaitExitTime = 0;
+  uint64_t npKitWaitTotalTime = 0;
 #endif  
 
   inline __device__ void barrier() {
@@ -113,11 +116,26 @@ private:
     uint32_t flag = recvFlag(i);
     uint32_t data1, flag1, data2, flag2;
     int spins = 0;
+
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_ENTRY) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_EXIT)
+    if (tid == 0) {
+      npKitWaitEntryTime = clock64();
+    }
+#endif
+
     do {
       asm("ld.volatile.global.v4.u32 {%0,%1,%2,%3}, [%4];" : "=r"(data1), "=r"(flag1), "=r"(data2), "=r"(flag2) : "l"(&src->i4));
       if (checkAbort(spins, 0)) break;
     } while ((flag1 != flag) || (flag2 != flag));
     uint64_t val64 = data1 + (((uint64_t)data2) << 32);
+
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_ENTRY) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_EXIT)
+    if (tid == 0) {
+      npKitWaitExitTime = clock64();
+      npKitWaitTotalTime += npKitWaitExitTime - npKitWaitEntryTime;
+    }
+#endif
+
     return val64;
   }
 
@@ -135,11 +153,26 @@ private:
     union ncclLLFifoLine* src = recvPtr(i) + offset;
     uint32_t flag = recvFlag(i);
     int spins = 0;
+
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_ENTRY) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_EXIT)
+    if (tid == 0) {
+      npKitWaitEntryTime = clock64();
+    }
+#endif
+
     while (line[i].flag1 != flag || line[i].flag2 != flag) {
       asm("ld.volatile.global.v4.u32 {%0,%1,%2,%3}, [%4];" : "=r"(line[i].data1), "=r"(line[i].flag1), "=r"(line[i].data2), "=r"(line[i].flag2) : "l"(&src->i4));
       if (checkAbort(spins, 0)) break;
     }
     uint64_t val64 = line[i].data1 + (((uint64_t)line[i].data2) << 32);
+
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_ENTRY) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_EXIT)
+    if (tid == 0) {
+      npKitWaitExitTime = clock64();
+      npKitWaitTotalTime += npKitWaitExitTime - npKitWaitEntryTime;
+    }
+#endif
+
     return val64;
   }
 
@@ -248,6 +281,19 @@ private:
     nelem = nelem < 0 ? 0 : nelem;
     if (SEND) waitSend(divUp(nelem, EltPerLine)*sizeof(ncclLLFifoLine));
 
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_ENTRY) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_EXIT)
+    if (tid == 0) {
+      npKitDataProcessTotalTime = 0;
+      npKitWaitTotalTime = 0;
+
+      npKitDataProcessSize = nelem*sizeof(T);
+      NpKit::CollectGpuEvent(NPKIT_EVENT_PRIM_LL_DATA_PROCESS_ENTRY,
+        npKitDataProcessSize, 0, clock64(), ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
+
+      npKitDataProcessEntryTime = clock64();
+    }
+#endif
+
     nelem -= tid*EltPerLine;
     srcElts += tid*EltPerLine;
     dstElts += tid*EltPerLine;
@@ -282,6 +328,19 @@ private:
 
       if (postOp) data = applyPostOp(redOp, data);
 
+// #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_ENTRY) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_EXIT)
+//     if (nelem - eltPerTrip <= 0) {
+//       if (tid == 0) {
+//         npKitDataProcessExitTime = clock64();
+//         npKitDataProcessTotalTime = npKitDataProcessExitTime - npKitDataProcessEntryTime - npKitWaitTotalTime;
+
+//         NpKit::CollectGpuEvent(NPKIT_EVENT_PRIM_LL_DATA_PROCESS_EXIT,
+//             npKitDataProcessSize, npKitDataProcessTotalTime, clock64(),
+//             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
+//       }
+//     }
+// #endif
+
       // Send : inter-node, then intra-node, then local
       if (SEND) {
         for (int i=1; i < MaxSend && i < fan.nsend(); i++)
@@ -292,9 +351,34 @@ private:
         storeData(dstElts, data, eltInLine);
         dstElts += eltPerTrip;
       }
+
+// #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_ENTRY) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_EXIT)
+//     if (nelem - eltPerTrip <= 0) {
+//       if (tid == 0) {
+//         npKitDataProcessExitTime = clock64();
+//         npKitDataProcessTotalTime = npKitDataProcessExitTime - npKitDataProcessEntryTime - npKitWaitTotalTime;
+
+//         NpKit::CollectGpuEvent(NPKIT_EVENT_PRIM_LL_DATA_PROCESS_EXIT,
+//             npKitDataProcessSize, npKitDataProcessTotalTime, clock64(),
+//             ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
+//       }
+//     }
+// #endif
+
       nelem -= eltPerTrip;
       offset += nthreads;
     }
+
+#if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_ENTRY) && defined(ENABLE_NPKIT_EVENT_PRIM_LL_DATA_PROCESS_EXIT)
+    if (tid == 0) {
+      npKitDataProcessExitTime = clock64();
+      npKitDataProcessTotalTime = npKitDataProcessExitTime - npKitDataProcessEntryTime - npKitWaitTotalTime;
+
+      NpKit::CollectGpuEvent(NPKIT_EVENT_PRIM_LL_DATA_PROCESS_EXIT,
+          npKitDataProcessSize, npKitDataProcessTotalTime, clock64(),
+          ncclShmem.comm.npKitEventCollectContexts + npKitCtxIdx);
+    }
+#endif    
 
     if (RECV) {
       for (int i=0; i < MaxRecv; i++) incRecv(i);

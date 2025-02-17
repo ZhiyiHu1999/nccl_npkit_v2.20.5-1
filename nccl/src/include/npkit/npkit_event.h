@@ -14,12 +14,12 @@
 #define NPKIT_EVENT_COPY_SEND_EXIT                              0x8
 #define NPKIT_EVENT_DIRECT_COPY_SEND_ENTRY                      0x9
 #define NPKIT_EVENT_DIRECT_COPY_SEND_EXIT                       0xA
-#define NPKIT_EVENT_DIRECT_RECV_ENTRY                           0xB
-#define NPKIT_EVENT_DIRECT_RECV_EXIT                            0xC
-#define NPKIT_EVENT_DIRECT_RECV_COPY_SEND_ENTRY                 0xD
-#define NPKIT_EVENT_DIRECT_RECV_COPY_SEND_EXIT                  0xE
-#define NPKIT_EVENT_DIRECT_RECV_REDUCE_COPY_SEND_ENTRY          0xF
-#define NPKIT_EVENT_DIRECT_RECV_REDUCE_COPY_SEND_EXIT           0x10
+#define NPKIT_EVENT_GPU_DIRECT_RECV_ENTRY                           0xB
+#define NPKIT_EVENT_GPU_DIRECT_RECV_EXIT                            0xC
+#define NPKIT_EVENT_GPU_DIRECT_RECV_COPY_SEND_ENTRY                 0xD
+#define NPKIT_EVENT_GPU_DIRECT_RECV_COPY_SEND_EXIT                  0xE
+#define NPKIT_EVENT_GPU_DIRECT_RECV_REDUCE_COPY_SEND_ENTRY          0xF
+#define NPKIT_EVENT_GPU_DIRECT_RECV_REDUCE_COPY_SEND_EXIT           0x10
 #define NPKIT_EVENT_DIRECT_SEND_ENTRY                           0x11
 #define NPKIT_EVENT_DIRECT_SEND_EXIT                            0x12
 #define NPKIT_EVENT_DIRECT_SEND_FROM_OUTPUT_ENTRY               0x13
@@ -32,10 +32,10 @@
 #define NPKIT_EVENT_RECV_REDUCE_COPY_EXIT                       0x1A
 #define NPKIT_EVENT_RECV_REDUCE_COPY_SEND_ENTRY                 0x1B
 #define NPKIT_EVENT_RECV_REDUCE_COPY_SEND_EXIT                  0x1C
-#define NPKIT_EVENT_RECV_REDUCE_SEND_ENTRY                      0x1D
-#define NPKIT_EVENT_RECV_REDUCE_SEND_EXIT                       0x1E
-#define NPKIT_EVENT_SEND_ENTRY                                  0x1F
-#define NPKIT_EVENT_SEND_EXIT                                   0x20
+#define NPKIT_EVENT_GPU_RECV_REDUCE_SEND_ENTRY                      0x1D
+#define NPKIT_EVENT_GPU_RECV_REDUCE_SEND_EXIT                       0x1E
+#define NPKIT_EVENT_GPU_SEND_ENTRY                                  0x1F
+#define NPKIT_EVENT_GPU_SEND_EXIT                                   0x20
 #define NPKIT_EVENT_SEND_FROM_OUTPUT_ENTRY                      0x21
 #define NPKIT_EVENT_SEND_FROM_OUTPUT_EXIT                       0x22
 
